@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build",
+      "group": { "isDefault": true, "kind": "build" },
+      "problemMatcher": [],
+      "label": "npm: build",
+      "detail": "tsc"
+    }
+  ]
+}

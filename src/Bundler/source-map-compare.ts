@@ -3,11 +3,14 @@ import { program, Action, Logger } from '@caporal/core';
 import { readFile as readFileAsync } from 'fs';
 import * as path from 'path';
 import * as SME from 'source-map-explorer';
+import * as SMETypes from 'source-map-explorer/lib/types';
 import { ActionParameters } from 'types';
 import { promisify } from 'util';
 import { AppArguments, BundleStats } from '../AppArguments';
 import { buildBundle } from './BuildBundle';
 import { CommonOptions, OUTPUT_FLAVORS } from './Options';
+import { glob } from 'glob';
+import fs from 'fs';
 
 const readFile = promisify(readFileAsync);
 
@@ -23,7 +26,12 @@ interface SingleBundleArgs {
   sourcemap?: string;
 }
 
-async function getStats(log: Logger, mainPath: string, sourcemapPath?: string): Promise<SME.ExploreResult> {
+function isSMEExploreResultError(value: unknown): value is SMETypes.ExploreResult {
+  const exploreResult = value as SMETypes.ExploreResult;
+  return exploreResult.errors !== undefined && Array.isArray(exploreResult.errors);
+}
+
+async function getStats(log: Logger, mainPath: string, sourcemapPath?: string): Promise<SMETypes.ExploreResult> {
   if (path.extname(mainPath) === '.json') {
     // Already processed stats file
     log.info(`Reading stats file from ${mainPath}`);
@@ -33,12 +41,45 @@ async function getStats(log: Logger, mainPath: string, sourcemapPath?: string): 
 
   log.info(`Parsing bundle at ${mainPath}`);
 
-  let result: SME.ExploreResult;
+  let result: SMETypes.ExploreResult;
+
+  const bundles: SMETypes.Bundle[] = [];
+  if (sourcemapPath) {
+    bundles.push({ code: mainPath, map: sourcemapPath });
+  } else {
+    // auto-detect sourcemaps
+    bundles.push(
+      ...glob
+        .globSync(mainPath, { absolute: true })
+        .map<SMETypes.Bundle>(code => {
+          let map: string | undefined;
+          const lastLine = fs
+            .readFileSync(code, 'utf8')
+            .split(/(\r\n|\n)/g)
+            .pop();
+          if (lastLine) {
+            const sourceMappingURLMatch = lastLine.match(/^\/\/# sourceMappingURL=(.*)$/);
+            if (sourceMappingURLMatch) {
+              map = path.join(path.dirname(code), sourceMappingURLMatch[1]);
+            }
+          }
+          if (!map) {
+            const sourcemapFile = `${code}.map`;
+            if (fs.existsSync(sourcemapFile)) {
+              map = sourcemapFile;
+            }
+          }
+          return { code, map };
+        })
+        // only include chunks with sourcemaps
+        .filter(bundle => bundle.map !== undefined)
+    );
+  }
 
   try {
-    result = await SME.explore({ code: mainPath, map: sourcemapPath }, { output: { format: 'json' } });
-  } catch (err) {
-    if (typeof err.errors === 'object') {
+    result = await SME.explore(bundles, { output: { format: 'json' } });
+  } catch (err: unknown) {
+    if (isSMEExploreResultError(err)) {
       // SME throws a ExploreResult object in case of errors
       result = err;
     } else {
@@ -64,7 +105,7 @@ function actionWrapper<
   TModifiedParams = Omit<ActionParameters, 'args' | 'options'> & { args: Args; options: Options }
 >(cb: (params: TModifiedParams) => Promise<void>): Action {
   return (params: ActionParameters) =>
-    cb((params as unknown) as TModifiedParams).catch(err => {
+    cb(params as unknown as TModifiedParams).catch(err => {
       const { logger } = params;
       logger.error(String(err));
       process.exit(1);
@@ -79,8 +120,8 @@ const compareBundles: Action = actionWrapper<CompareArgs, CommonOptions>(async (
 
   const appArgs: AppArguments = {
     mode: 'comparison',
-    leftBundle: leftExploreResult.bundles[0],
-    rightBundle: rightExploreResult.bundles[0]
+    leftBundles: leftExploreResult.bundles,
+    rightBundles: rightExploreResult.bundles
   };
 
   return buildBundle(appArgs, options, logger);

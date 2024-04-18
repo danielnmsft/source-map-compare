@@ -6,12 +6,14 @@ import { BundleComparisonApp, SingleBundleApp } from './App';
 
 initializeIcons();
 
+
 // Allow arguments to be injected via Webpack BannerPlugin
-const args: AppArguments = window['APP_ARGUMENTS'];
+declare global { interface Window { APP_ARGUMENTS: AppArguments; } }
+const args: AppArguments = window.APP_ARGUMENTS;
 let root: React.ReactElement;
 
 if (args.mode === 'comparison') {
-  root = <BundleComparisonApp leftBundle={args.leftBundle} rightBundle={args.rightBundle} />;
+  root = <BundleComparisonApp leftBundles={args.leftBundles} rightBundles={args.rightBundles} />;
 } else {
   root = <SingleBundleApp exploredBundle={args.bundle} />;
 }

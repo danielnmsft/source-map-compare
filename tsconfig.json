@@ -10,7 +10,6 @@
     "noUnusedParameters": true,
     "noUnusedLocals": true,
     "forceConsistentCasingInFileNames": true,
-    "suppressImplicitAnyIndexErrors": true,
     "moduleResolution": "node",
     "importHelpers": true,
     "skipLibCheck": true,

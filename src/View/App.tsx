@@ -1,6 +1,6 @@
 import { DetailsList } from '@fluentui/react';
 import * as React from 'react';
-import * as SME from 'source-map-explorer';
+import * as SMETypes from 'source-map-explorer/lib/types';
 import * as SafeHooks from '../Helpers/SafeHooks';
 import {
   ComparisonListItem,
@@ -23,7 +23,7 @@ const makeOnItemInvokedHandler = (expandState: ExpandState, setExpandState: (new
 const getListItemKey = (item: ListItem<unknown, unknown, unknown>): string => String(item.nodeId);
 
 export interface SingleBundleAppProps {
-  exploredBundle: SME.ExploreBundleResult;
+  exploredBundle: SMETypes.ExploreBundleResult;
 }
 
 export const SingleBundleApp: React.FC<SingleBundleAppProps> = props => {
@@ -49,13 +49,13 @@ export const SingleBundleApp: React.FC<SingleBundleAppProps> = props => {
 };
 
 export interface BundleComparisonAppProps {
-  leftBundle: SME.ExploreBundleResult;
-  rightBundle: SME.ExploreBundleResult;
+  leftBundles: SMETypes.ExploreBundleResult[];
+  rightBundles: SMETypes.ExploreBundleResult[];
 }
 
 export const BundleComparisonApp: React.FC<BundleComparisonAppProps> = props => {
   const [expandState, setExpandState] = React.useState<ExpandState>({});
-  const fileTree = SafeHooks.useMemo(makeComparisonFileTree, props.leftBundle, props.rightBundle);
+  const fileTree = SafeHooks.useMemo(makeComparisonFileTree, props.leftBundles, props.rightBundles);
   const listItems = SafeHooks.useMemo(
     makeListFromFileTree,
     fileTree,

@@ -1,32 +1,57 @@
-import * as SME from 'source-map-explorer';
+import path from 'path';
+import * as SMETypes from 'source-map-explorer/lib/types';
 import { isTruthy } from '../Helpers/TypeUtils';
 import { DescendantInfoPredicate, ListItem } from './FileList';
 import { FileTree, makeFileTree, reduceFileTree } from './FileTree';
 
-export type ComparisonMetadata = { leftSize: number; rightSize: number };
+export interface BundleMetadata {
+  bundleNames: string[];
+  size: number;
+}
+
+export interface ComparisonMetadata {
+  left: BundleMetadata;
+  right: BundleMetadata;
+}
 
 export type ComparisonFileTree = FileTree<ComparisonMetadata, ComparisonMetadata>;
 
-const normalizeFilepath = (filepath: string) => filepath.replace(/.+[/\\]node_modules[/\\]/, '//node_modules/');
+function normalizeFilepath(filepath: string) {
+  if (!URL.canParse(filepath)) {
+    return filepath;
+  }
+  const uri = new URL(filepath);
+  return path.posix.normalize(uri.pathname).replace(/.+[/\\]node_modules[/\\]/, '//node_modules/');
+}
 
 export function makeComparisonFileTree(
-  leftBundleInfo: SME.ExploreBundleResult,
-  rightBundleInfo: SME.ExploreBundleResult
+  leftBundles: SMETypes.ExploreBundleResult[],
+  rightBundles: SMETypes.ExploreBundleResult[]
 ): ComparisonFileTree {
   // merge contents
   const diffMap = new Map<string, ComparisonMetadata>();
 
-  for (const [filepath, data] of Object.entries(leftBundleInfo.files)) {
-    diffMap.set(normalizeFilepath(filepath), { leftSize: data.size, rightSize: 0 });
+  for (const { bundleName, files } of leftBundles) {
+    for (const [filepath, data] of Object.entries(files)) {
+      diffMap.set(normalizeFilepath(filepath), {
+        left: { size: data.size, bundleNames: [bundleName] },
+        right: { size: 0, bundleNames: [] }
+      });
+    }
   }
 
-  for (const [filepath, data] of Object.entries(rightBundleInfo.files)) {
-    const normalizedfilepath = normalizeFilepath(filepath);
-    const leftValue = diffMap.get(normalizedfilepath);
-    if (leftValue) {
-      leftValue.rightSize = data.size;
-    } else {
-      diffMap.set(normalizedfilepath, { leftSize: 0, rightSize: data.size });
+  for (const { bundleName, files } of rightBundles) {
+    for (const [filepath, data] of Object.entries(files)) {
+      const normalizedFilePath = normalizeFilepath(filepath);
+      const leftValue = diffMap.get(normalizedFilePath);
+      if (leftValue) {
+        leftValue.right = { size: data.size, bundleNames: [bundleName] };
+      } else {
+        diffMap.set(normalizedFilePath, {
+          left: { size: 0, bundleNames: [] },
+          right: { size: data.size, bundleNames: [bundleName] }
+        });
+      }
     }
   }
 
@@ -37,10 +62,16 @@ export function makeComparisonFileTree(
       // eslint-disable-next-line no-restricted-syntax
       [...Object.values(files), ...Object.values(subdirectories)].filter(isTruthy).reduce<ComparisonMetadata>(
         (prev, next) => ({
-          leftSize: prev.leftSize + next.meta.leftSize,
-          rightSize: prev.rightSize + next.meta.rightSize
+          left: {
+            size: prev.left.size + next.meta.left.size,
+            bundleNames: [...new Set(prev.left.bundleNames.concat(next.meta.left.bundleNames))]
+          },
+          right: {
+            size: prev.right.size + next.meta.right.size,
+            bundleNames: [...new Set(prev.right.bundleNames.concat(next.meta.right.bundleNames))]
+          }
         }),
-        { leftSize: 0, rightSize: 0 }
+        { left: { size: 0, bundleNames: [] }, right: { size: 0, bundleNames: [] } }
       )
   );
 }
@@ -52,7 +83,7 @@ export const makeDescendantInfoForComparisonFileTree: DescendantInfoPredicate<
   ComparisonMetadata,
   DescendantComparisonInfo
 > = (curr, _parent, root) => ({
-  ratioChangeOfTotal: (curr.meta.rightSize - curr.meta.leftSize) / (root.meta.rightSize - root.meta.leftSize)
+  ratioChangeOfTotal: (curr.meta.right.size - curr.meta.left.size) / (root.meta.right.size - root.meta.left.size)
 });
 
 export type ComparisonListItem = ListItem<ComparisonMetadata, ComparisonMetadata, DescendantComparisonInfo>;

@@ -1,4 +1,4 @@
-import * as SMETypes from 'source-map-explorer';
+import * as SMETypes from 'source-map-explorer/lib/types';
 
 export type BundleStats = { results: SMETypes.ExploreBundleResult[] };
 
@@ -8,8 +8,8 @@ export type BundleStats = { results: SMETypes.ExploreBundleResult[] };
 export type AppArguments =
   | {
       mode: 'comparison';
-      leftBundle: SMETypes.ExploreBundleResult;
-      rightBundle: SMETypes.ExploreBundleResult;
+      leftBundles: SMETypes.ExploreBundleResult[];
+      rightBundles: SMETypes.ExploreBundleResult[];
     }
   | {
       mode: 'single';
